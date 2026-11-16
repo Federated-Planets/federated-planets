@@ -42,9 +42,10 @@ The largest gaps are traveler identity and verifiable signatures. Both are thing
 - **Planet** = an atproto account whose handle is the planet's domain. The DID is the durable identifier; the domain remains the location.
 - **Coordinates stay hashed from the domain** (unchanged MD5 algorithm). If a planet changes its handle it moves in space but keeps its DID, history, and neighbors' links. This turns a domain change from "planet destroyed" into "planet relocated".
 - **Person** = any atproto account, signed in with atproto OAuth at a space port. A person does not need to own a planet or a ship.
-- **Ship** = a vessel, separate from the people aboard it. A ship is a record in its owner's repo and is identified by that record's AT-URI, which becomes the `ship_id`. Ships are not accounts and never sign in; authority over a ship comes from its owner's DID.
-- **Shuttle** = a ship owned and funded by a planet (the record lives in the planet's repo).
-- **Anonymous visitors** have no identity and may ride shuttles only (see §3.4). No account is needed to explore.
+- **Ship** = a first-class entity with a life of its own, not a possession scoped to one account. It is born at a planet, keeps one identity for its whole life, changes owners and operators, gets upgraded, carries many people, and accumulates a log. Its `ship_id` is the permanent reference (AT-URI plus CID) to its launch record. See §3.4.
+- **Position belongs to ships.** A person aboard a ship is wherever the ship is. A person not aboard any ship is on the planet where they last disembarked.
+- **Shuttle** = a ship whose owner is a planet.
+- **Anonymous visitors** have no identity and may ride shuttles only. No account is needed to explore.
 - **Verification** of a planet: resolve handle to DID, resolve DID document, confirm it lists `at://<domain>`, read the planet record from the PDS named in the document.
 
 ### 3.2 Lexicons
@@ -55,10 +56,10 @@ NSIDs live under the project's domain (`com.federatedplanets.*`) and are publish
 | ---------------------------------------- | -------------------------- | ------ | -------------------------------------------------------------------------------------------------- |
 | `com.federatedplanets.planet`            | Planet                     | `self` | `name`, `description`, `landingSite`, `spacePort`, `travelSafetyLevel`, `spacePortKey` (public key) |
 | `com.federatedplanets.warpLink`          | Planet                     | TID    | `subject` (neighbor DID), `domain`, optional `name`. One record per neighbor                        |
-| `com.federatedplanets.ship`              | Ship owner (person/planet) | TID    | `name`, `class` (`ship` or `shuttle`), optional description. Its AT-URI is the `ship_id`           |
-| `com.federatedplanets.travel.voyage`     | Ship owner ("ship's log")  | TID    | The approved travel plan for the ship, with all controller signatures                              |
-| `com.federatedplanets.travel.journey`    | Person ("passport")        | TID    | The same signed plan, recording that this person was aboard                                        |
-| `com.federatedplanets.travel.logEntry`   | Origin and destination     | TID    | Same signed plan, forming the public Mission Archive; also declined requests with their reason     |
+| `com.federatedplanets.ship.launch`       | Planet where it was built  | TID    | The ship's birth: `name`, `class`, first owner. Its AT-URI and CID are the `ship_id` for life        |
+| `com.federatedplanets.ship.event`        | Planet where it happened   | TID    | One entry in the ship's log: `ship`, `prev` (previous event), `type`, payload, signatures           |
+| `com.federatedplanets.travel.declined`   | Declining planet           | TID    | Declined travel requests with the stated reason (`TRAVEL.md` §7)                                   |
+| `com.federatedplanets.person.aboard`     | Person                     | `self` | Which ship the person is aboard and in what role; their consent to the matching boarding event     |
 
 One record per warp link (like a follow) rather than an array in the planet record means mutual-neighbor checks for shuttle limits (`TRAVEL.md` §8) become a single lookup, and optional indexers can answer "who links to me?".
 
@@ -66,35 +67,36 @@ One record per warp link (like a follow) rather than an array in the planet reco
 
 - Election pool, seed, PBFT phases, timing, and shuttle limits are unchanged.
 - Controllers identify themselves by DID and sign with the key published in their planet record. Any party can now actually verify the $2f+1$ signatures, closing the auditability gap in `TRAVEL.md` §5.
-- A travel plan now names a **ship** plus a **manifest**: the DIDs of signed-in people aboard, a count of anonymous passengers (shuttles only), and cargo if any.
-- Two locations are tracked independently: the ship's (from its last signed voyage) and each person's (from their last signed journey). Controllers check that the ship is at the origin and that every listed person is at the origin too.
-- A plan must be authorized by the ship's owner: the signed-in owner for a private ship, the origin planet for a shuttle. Each listed passenger consents by being signed in at the origin space port.
-- On approval, the origin space port writes the signed plan to its own repo, to the ship's log, and to each signed-in passenger's passport (via their OAuth session).
-- Locations are cross-checked with the origin's own state. Someone who deletes their own records only harms themselves.
+- A travel plan moves a **ship**, not a person. It must be filed by the ship's current owner or an operator, signed in at the origin space port. Everyone aboard moves with it; nobody's location is checked separately.
+- Controllers check that the ship is at the origin by reading the head of its log from the origin planet.
+- Finished, signed results are stored by **planets in their own repos**: an approved voyage is written by both origin and destination. In-flight consensus state stays in the space port's own storage and is never published.
+- A planet cannot forge an event (controller signatures) and cannot quietly drop one (the next event names its predecessor, and for voyages the other planet holds a copy).
 
-### 3.4 People and ships
+### 3.4 Ships
 
-People and ships are separate. Who you are decides what you may board; what you board decides what the trip can do.
+A ship is not an atproto account and does not live in any one repo. It is a **chain of signed events**, each stored by the planet where it happened and each pointing at the one before it. The chain travels with the ship: the planet a ship is docked at always holds the head of its log.
 
-**People**
+| Event               | Where it is recorded        | Authorized by                               |
+| ------------------- | --------------------------- | ------------------------------------------- |
+| Launch              | Planet that built the ship  | The planet and the first owner              |
+| Voyage              | Origin and destination      | Owner or operator, plus elected controllers |
+| Boarding / leaving  | Planet where the ship is    | The person, plus owner or operator          |
+| Operator change     | Planet where the ship is    | Owner                                       |
+| Ownership transfer  | Planet where the ship is    | Old owner and new owner                     |
+| Upgrade             | Planet performing it        | Owner, plus the planet                      |
+| Other transactions  | Planet where it happened    | Per transaction type                        |
 
-| | Anonymous visitor | Signed-in person |
-| --- | --- | --- |
-| Identity | None | atproto DID |
-| May board | Shuttles only | Shuttles and private ships |
-| Record of the trip | None; only counted in the shuttle's manifest | `travel.journey` in their passport |
-| Persistence | None | Portable history and verified current location |
+Consequences:
 
-**Ships**
+- **Identity outlives ownership.** Selling a ship appends a transfer event; the `ship_id`, history, and upgrades stay with the ship.
+- **Roles are state, not scope.** Owner, operators, and passengers are derived by replaying the log. Owners and operators may file travel plans; passengers may not.
+- **People point at ships.** A person's `person.aboard` record names the ship they are on. It is the person's consent and a lookup shortcut; the boarding event on the planet is the authority. A person can be aboard only one ship at a time.
+- **Shuttles are ordinary ships owned by a planet**, restricted to that planet's warp ring neighbors and the caps in `TRAVEL.md` §8. Anonymous visitors ride as a head count and leave no record; signed-in people riding a shuttle board it like any other ship.
+- **Everything is public.** A ship's full history, including who was aboard, is readable by anyone.
 
-| | Planet-sponsored shuttle | Private ship |
-| --- | --- | --- |
-| Owner and accountable party | The sponsoring planet | A signed-in person |
-| Record | `ship` in the planet's repo | `ship` in the owner's repo |
-| Routes | Warp ring neighbors only, within the shuttle limits of `TRAVEL.md` §8 | Set by the travel protocol, not by shuttle capacity |
-| Capabilities | Restricted (see open question 3) | Full: everything that needs a durable, owned vessel |
+**Alternative considered: a ship as its own atproto account.** Giving each ship a DID and repo would make its log self-contained and portable. But an account is controlled by whoever holds its credentials, so every ship would need a custodian (a "port of registry" planet running a multi-account data server), ownership transfer would mean handing over account control, and the log could still be rewritten by that controller. The event chain gets the same "life of its own" with no extra hosting and with transfers validated by the game itself. A ship account could be added later as an optional mirror of the chain.
 
-Shuttles keep casual visiting frictionless while every vessel still has an accountable owner, and the existing shuttle caps bound how much anonymous traffic any planet can generate. A signed-in person riding a shuttle still gets a passport entry, so their location stays consistent whichever kind of vessel they use.
+**Known weakness:** if a planet disappears, the events it stored go with it. The chain stays verifiable from the surviving links, but history from that planet is lost unless the owner (or anyone) kept a copy. Owners mirroring their ship's log into their own repo is the suggested mitigation.
 
 ### 3.5 Backward compatibility
 
@@ -131,10 +133,13 @@ The reference planet is Astro SSR on Cloudflare Workers with a SQLite-backed Dur
 ### Phase 3: People and ships
 
 - "Sign in with your handle" at the space port.
-- Publish the `ship` lexicon; `ship_id` becomes a ship record's AT-URI. Planets register their shuttles; signed-in people can register ships.
-- Extend the travel plan with a passenger and cargo manifest; update `TRAVEL.md` (§4 and §8) accordingly.
-- Write `travel.voyage`, `travel.journey`, and `travel.logEntry` records.
-- Validate ship and person locations from signed records.
+- Publish the `ship.launch`, `ship.event`, and `person.aboard` lexicons. Planets launch shuttles; signed-in people commission ships at a planet.
+- Travel plans move ships; `ship_id` becomes the launch reference. Update `TRAVEL.md` (§4 and §8) accordingly.
+- Boarding, leaving, and operator changes. Ship position checked from the log head at the origin.
+
+### Phase 3b: Ship lifecycle
+
+- Ownership transfer, upgrades, and other transactions as further event types.
 
 ### Phase 4: Discovery (optional, never required)
 
@@ -149,12 +154,12 @@ The reference planet is Astro SSR on Cloudflare Workers with a SQLite-backed Dur
 
 1. **Additive or replacement?** This plan keeps `manifest.json` as a first-class path. Requiring atproto would simplify the spec but raise the bar for joining and add third-party dependencies.
 2. **Coordinates from the domain or the DID?** Domain keeps the founding rule and makes relocation possible. DID would make position permanent but break "your domain name is your destiny".
-3. **Shuttle and ship limits.** Decided: people and ships are separate; anonymous visitors ride shuttles only; signed-in people may use either (§3.4). Still open: exactly what shuttles may carry (passengers, cargo, or both), whether private ships may fly to non-neighbors or have a concurrency cap, and how ship ownership is transferred given that repo records are mutable.
+3. **Ships.** Decided: ships are first-class and people take their position from the ship they are aboard (§3.4). Still open: whether ships are event chains on planets (proposed) or their own atproto accounts; exactly what shuttles may carry (passengers, cargo, or both); whether private ships may fly to non-neighbors or have a concurrency cap; and whether transfers and upgrades need elected controllers or only the local planet's signature.
 4. **Fog of War.** Accept that travel records are public and keep secrets off-repo, or wait for atproto private data before building cargo features.
 5. **`did:plc` acceptance.** Allow it for reach (nearly all existing accounts) while documenting the dependency, or require `did:web` for planets.
 
 ---
 
-_Document Version: 0.3.0_
+_Document Version: 0.4.0_
 
 _Status: Exploration_
