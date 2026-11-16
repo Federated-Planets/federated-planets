@@ -45,7 +45,7 @@ The largest gaps are traveler identity and verifiable signatures. Both are thing
 - **Shuttle** = a planet-funded vessel running between warp ring neighbors. Shuttles are the first and, initially, the only way to travel. In the first release they carry people only.
 - **Anonymous visitors** have no identity. They may ride shuttles as passengers but have no persistent location or history. No account is needed to explore.
 - **Position.** A person is on a planet or in transit on a shuttle. Their position comes from the last signed trip that carried them.
-- **Ship** (later) = a first-class entity with a life of its own. Introduced only after shuttle travel and trade work; see §3.5.
+- **Ship** (later) = a first-class entity with a life of its own. Introduced only after shuttle travel works; see §3.5.
 - **Verification** of a planet: resolve handle to DID, resolve DID document, confirm it lists `at://<domain>`, read the planet record from the PDS named in the document.
 
 ### 3.2 Lexicons
@@ -89,7 +89,7 @@ Routes and capacity follow the shuttle limits in `TRAVEL.md` §8.
 
 ### 3.5 Ships (later)
 
-Ships come after shuttle travel and trade are working. When they arrive, people aboard a ship take their position from the ship, and `person.location` points at the ship instead of a trip. The intended model:
+Ships come after people can travel on shuttles. When they arrive, people aboard a ship take their position from the ship, and `person.location` points at the ship instead of a trip. The intended model:
 
 A ship is not an atproto account and does not live in any one repo. It is a **chain of signed events**, each stored by the planet where it happened and each pointing at the one before it. The chain travels with the ship: the planet a ship is docked at always holds the head of its log.
 
