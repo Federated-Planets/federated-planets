@@ -19,7 +19,8 @@ These follow from decisions already made in the earlier documents, and are assum
 2. **Provenance.** Whether a good's identity includes its issuing planet, and how other planets detect a planet inflating stock it did not issue.
 3. **Currency.** One shared currency, per-planet currencies, or barter only; and who is allowed to create it.
 4. **Durability.** Holdings recorded on one planet are lost if that planet disappears (see [Planets §5](1-planets.md)); decide whether owners carry signed proof of what they hold.
-5. **Ordering.** Whether this comes before or after ships.
+5. **History depth.** Whether calculating holdings needs full trip and transfer history, which would rule out a time-based archive cap for those records.
+6. **Ordering.** Whether this comes before or after ships.
 
 ---
 

@@ -45,6 +45,10 @@ A planet's records live only on the PDS hosting its account. What happens when t
 
 The most sovereign setups are the most fragile. In every case the records are also gone if the owner deletes the account or the host shuts down. Trips are protected against this by being stored on two planets; anything stored on one planet only is exactly as durable as that planet.
 
+### Archive depth
+
+The cap of 10 most recent arrivals and departures from `TRAVEL.md` §4 stays as it is in this document: planets keep only those trip records in their repos. Nothing here depends on older history. The cap is to be removed or made time-based once history starts to matter, first in [People](2-people.md), where a person's location is proven by looking up a past trip.
+
 ## 6. Implementation Fit (Reference Planet)
 
 - **Reads:** plain `fetch` to PDS XRPC endpoints, cached in the existing `traffic_controllers` table.
@@ -81,7 +85,6 @@ The most sovereign setups are the most fragile. In every case the records are al
 ## 8. Open Questions
 
 1. **Coordinates from the domain or the DID?** Domain keeps the founding rule and makes relocation possible. DID would make position permanent but break "your domain name is your destiny".
-2. **Archive depth.** `TRAVEL.md` keeps the 10 most recent arrivals and departures. A repo could hold the full history; decide whether to keep the cap.
 
 ---
 

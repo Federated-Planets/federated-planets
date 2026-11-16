@@ -30,6 +30,7 @@ Part of the [AT Protocol adoption plan](../ATPROTO.md). This document covers peo
 - A signed-in passenger consents by being signed in at the origin space port when the plan is filed.
 - Controllers check that each signed-in passenger is at the origin, by reading the origin planet's records. The planets' records are the authority; a person who deletes their own `person.location` only loses the shortcut.
 - Routes and capacity follow the shuttle limits in `TRAVEL.md` §8.
+- **The archive cap must change here.** A person's location is proven by the trip that last moved them, which on a busy planet can quickly fall outside the 10 most recent records. The cap from `TRAVEL.md` §4 is removed or replaced with a time-based one (open question 4).
 - A person's first appearance needs a rule, since they have no prior trip (open question 1).
 
 ## 4. Implementation Fit (Reference Planet)
@@ -53,6 +54,7 @@ Part of the [AT Protocol adoption plan](../ATPROTO.md). This document covers peo
 - Publish the `person.location` lexicon and the extended `travel.trip`.
 - Travel plans gain a passenger manifest; anonymous visitors keep working as a head count.
 - Controllers validate signed-in passengers' locations.
+- Replace the 10-record archive cap (open question 4).
 - Update `TRAVEL.md` (§4 and §8) to describe shuttles as the travel vehicle and the two kinds of passenger.
 
 ## 6. Open Questions
@@ -60,6 +62,7 @@ Part of the [AT Protocol adoption plan](../ATPROTO.md). This document covers peo
 1. **Where does a person start?** Options: the planet where they first sign in, or a home position hashed from their own handle.
 2. **Must a person be at the origin?** A person signing in at a planet's website from elsewhere in the universe: is that allowed for viewing only, or is their location simply wherever their last trip left them?
 3. **Stranded people.** What happens to a person whose current planet disappears.
+4. **Archive retention.** No cap, or a time-based cap. With a time-based cap, a person who stays put longer than the window loses the proof of where they are, so it needs a rule: for example, a planet always keeps the latest arrival record of every person still present.
 
 ---
 
