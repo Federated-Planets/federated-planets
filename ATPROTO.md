@@ -42,8 +42,8 @@ The largest gaps are traveler identity and verifiable signatures. Both are thing
 - **Planet** = an atproto account whose handle is the planet's domain. The DID is the durable identifier; the domain remains the location.
 - **Coordinates stay hashed from the domain** (unchanged MD5 algorithm). If a planet changes its handle it moves in space but keeps its DID, history, and neighbors' links. This turns a domain change from "planet destroyed" into "planet relocated".
 - **Person** = any atproto account, signed in with atproto OAuth at a space port. A person does not need to own a planet or a ship.
-- **Shuttle** = a planet-funded vessel running between warp ring neighbors. Shuttles are the first and, initially, the only way to travel. They carry passengers and cargo.
-- **Anonymous visitors** have no identity. They may ride shuttles as passengers but cannot own or trade anything. No account is needed to explore.
+- **Shuttle** = a planet-funded vessel running between warp ring neighbors. Shuttles are the first and, initially, the only way to travel. In the first release they carry people only.
+- **Anonymous visitors** have no identity. They may ride shuttles as passengers but have no persistent location or history. No account is needed to explore.
 - **Position.** A person is on a planet or in transit on a shuttle. Their position comes from the last signed trip that carried them.
 - **Ship** (later) = a first-class entity with a life of its own. Introduced only after shuttle travel and trade work; see §3.5.
 - **Verification** of a planet: resolve handle to DID, resolve DID document, confirm it lists `at://<domain>`, read the planet record from the PDS named in the document.
@@ -56,9 +56,8 @@ NSIDs live under the project's domain (`com.federatedplanets.*`) and are publish
 | -------------------------------------- | ------------------------- | ------ | --------------------------------------------------------------------------------------------------- |
 | `com.federatedplanets.planet`          | Planet                    | `self` | `name`, `description`, `landingSite`, `spacePort`, `travelSafetyLevel`, `spacePortKey` (public key) |
 | `com.federatedplanets.warpLink`        | Planet                    | TID    | `subject` (neighbor DID), `domain`, optional `name`. One record per neighbor                        |
-| `com.federatedplanets.travel.trip`     | Origin and destination    | TID    | An approved shuttle trip: route, times, passenger and cargo manifest, controller signatures         |
+| `com.federatedplanets.travel.trip`     | Origin and destination    | TID    | An approved shuttle trip: route, times, passenger manifest, controller signatures                   |
 | `com.federatedplanets.travel.declined` | Declining planet          | TID    | Declined travel requests with the stated reason (`TRAVEL.md` §7)                                    |
-| `com.federatedplanets.trade.transfer`  | Planet where it happened  | TID    | Goods changing hands between two people on the same planet                                          |
 | `com.federatedplanets.person.location` | Person                    | `self` | Pointer to the trip that last moved this person; a lookup shortcut, not the authority               |
 | `com.federatedplanets.ship.launch`     | Planet where it was built | TID    | _Later._ The ship's birth. Its AT-URI and CID are the `ship_id` for life                            |
 | `com.federatedplanets.ship.event`      | Planet where it happened  | TID    | _Later._ One entry in a ship's log: `ship`, `prev` (previous event), `type`, payload, signatures    |
@@ -67,16 +66,14 @@ NSIDs live under the project's domain (`com.federatedplanets.*`) and are publish
 
 - Election pool, seed, PBFT phases, timing, and shuttle limits are unchanged.
 - Controllers identify themselves by DID and sign with the key published in their planet record. Any party can now actually verify the $2f+1$ signatures, closing the auditability gap in `TRAVEL.md` §5.
-- A travel plan is a **shuttle trip** with a manifest: the DIDs of signed-in passengers, a head count of anonymous passengers, and any cargo with its owner.
-- Controllers check that each signed-in passenger and each cargo item is at the origin, by reading the origin planet's records.
+- A travel plan is a **shuttle trip** with a manifest: the DIDs of signed-in passengers and a head count of anonymous passengers.
+- Controllers check that each signed-in passenger is at the origin, by reading the origin planet's records.
 - Finished, signed results are stored by **planets in their own repos**: an approved trip is written by both origin and destination. In-flight consensus state stays in the space port's own storage and is never published.
 - A planet cannot forge a trip (controller signatures) and cannot quietly drop one (the other planet holds a copy).
 
-### 3.4 Shuttles: travel and trade (first release)
+### 3.4 Shuttles: people traveling (first release)
 
-Everything in the first release runs on shuttles, so no ship model is needed yet. A shuttle is just capacity on a route that a planet funds; the trip record is the only thing that persists.
-
-**Travel**
+The first release is only people traveling on shuttles. No ship model, goods, trade, or currency is needed. A shuttle is just capacity on a route that a planet funds; the trip record is the only thing that persists.
 
 |                     | Anonymous visitor    | Signed-in person                                               |
 | ------------------- | -------------------- | -------------------------------------------------------------- |
@@ -84,17 +81,11 @@ Everything in the first release runs on shuttles, so no ship model is needed yet
 | Ride shuttles       | Yes, as a head count | Yes, named in the manifest                                     |
 | Record of the trip  | None                 | Named in the planets' `travel.trip`; `person.location` updated |
 | Persistent location | No                   | Yes                                                            |
-| Own and trade goods | No                   | Yes                                                            |
+| Travel history      | No                   | Yes, readable from the planets visited                         |
 
-**Trade**
+Routes and capacity follow the shuttle limits in `TRAVEL.md` §8.
 
-- **Goods sit on planets.** Each planet keeps the record of who holds what there, the same way it keeps its traffic log. Goods are owned by signed-in people (or by the planet itself).
-- **Trading** is a transfer between two people who are on the same planet, recorded by that planet.
-- **Shipping** is cargo on a shuttle trip. The same consensus that approves the trip moves the goods: debited at the origin, credited at the destination, signed by the elected controllers, so goods cannot be in two places.
-- **Cargo-only trips** are allowed: a person can send goods to someone on a neighboring planet without travelling.
-- **Capacity** is bounded by the shuttle limits in `TRAVEL.md` §8, which makes warp ring links economically meaningful: mutual neighbors get twice the trade capacity.
-
-What goods actually are, where they come from, and what stops a planet inflating its own stock is game design that still needs to be written (open question 6).
+**Deferred:** goods, trade, and currency. Nothing in the first release should assume their design, but the trip manifest is the natural place for cargo to be added later, moved by the same consensus that approves the trip.
 
 ### 3.5 Ships (later)
 
@@ -164,22 +155,17 @@ The reference planet is Astro SSR on Cloudflare Workers with a SQLite-backed Dur
 - Controllers validate signed-in passengers' locations from the origin planet's records.
 - Update `TRAVEL.md` (§4 and §8) to describe shuttles as the travel vehicle and the two kinds of passenger.
 
-### Phase 4: Trade on shuttles
+### Later (order undecided)
 
-- Design goods (open question 6), then holdings on planets and same-planet transfers.
-- Cargo in the trip manifest, including cargo-only trips, moved by the same consensus as the trip.
+- **Goods, trade, and currency.** Needs its own design first (open question 6).
+- **Ships.** Launch, voyages, boarding, operators, ownership transfer, upgrades (§3.5).
 
-### Phase 5: Ships
-
-- Launch, voyages, boarding, operators; then ownership transfer and upgrades (§3.5).
-- People aboard a ship take their position from it; cargo can travel by ship.
-
-### Phase 6: Discovery (optional, never required)
+### Phase 4: Discovery (optional, never required)
 
 - Map and explorer tools that consume a firehose or backlink index to show the whole federation.
 - These are conveniences any party may run; the protocol must keep working without them.
 
-### Phase 7: Fully sovereign planets
+### Phase 5: Fully sovereign planets
 
 - Document and template the `did:web` plus self-hosted PDS on Workers configuration in `create-planet`.
 
@@ -187,13 +173,13 @@ The reference planet is Astro SSR on Cloudflare Workers with a SQLite-backed Dur
 
 1. **Additive or replacement?** This plan keeps `manifest.json` as a first-class path. Requiring atproto would simplify the spec but raise the bar for joining and add third-party dependencies.
 2. **Coordinates from the domain or the DID?** Domain keeps the founding rule and makes relocation possible. DID would make position permanent but break "your domain name is your destiny".
-3. **Ships (deferred).** Decided: shuttles first, carrying passengers and cargo; ships are first-class entities introduced later (§3.5). Open for later: event chains on planets (proposed) or ships as their own atproto accounts; whether ships may fly to non-neighbors or have a concurrency cap; whether transfers and upgrades need elected controllers.
+3. **Ships (deferred).** Decided: shuttles first, carrying people only; ships are first-class entities introduced later (§3.5). Open for later: event chains on planets (proposed) or ships as their own atproto accounts; whether ships may fly to non-neighbors or have a concurrency cap; whether transfers and upgrades need elected controllers.
 4. **Fog of War.** Accept that travel records are public and keep secrets off-repo, or wait for atproto private data before building cargo features.
 5. **`did:plc` acceptance.** Allow it for reach (nearly all existing accounts) while documenting the dependency, or require `did:web` for planets.
-6. **Goods.** What is tradeable, who creates it (planets issuing their own goods is the natural sovereign answer), whether a good's identity includes its issuing planet, and how other planets detect a planet that inflates stock it did not issue.
+6. **Goods, trade, and currency (deferred).** To be designed after people can travel: what is tradeable, who creates it, how currency works, and how planets are kept honest about stock.
 
 ---
 
-_Document Version: 0.5.0_
+_Document Version: 0.6.0_
 
 _Status: Exploration_
