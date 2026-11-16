@@ -1,21 +1,28 @@
-# AT Protocol Exploration: Identity and Data Storage
+# AT Protocol Adoption: Overview
 
-This document evaluates moving Federated Planets onto the [AT Protocol](https://atproto.com) (atproto) for identity and data storage, and proposes a phased plan.
+This document evaluates moving Federated Planets onto the [AT Protocol](https://atproto.com) (atproto) for identity and data storage. The plan itself is split into four documents, to be implemented in order:
+
+| #   | Document                                  | Scope                                                              | Status            |
+| --- | ----------------------------------------- | ------------------------------------------------------------------ | ----------------- |
+| 1   | [Planets](atproto/1-planets.md)           | Planet identity, planet records, warp ring, verifiable space ports | First             |
+| 2   | [People](atproto/2-people.md)             | Signing in with an atproto identity and traveling on shuttles      | Second            |
+| 3   | [Ships](atproto/3-ships.md)               | Ships as first-class entities                                      | Later             |
+| 4   | [Goods and Economy](atproto/4-economy.md) | Goods, trade, and currency                                         | Later, undesigned |
+
+Each document depends only on the ones before it.
 
 **Verdict:** feasible and a good fit for _identity_ and _public game state_; a poor fit for _consensus messaging_ and _private data_. The recommendation is a **hybrid, additive adoption** rather than a full move: atproto becomes the identity and record layer, while space ports keep talking to each other directly over HTTP.
 
 ## 1. Where the Game Stands Today
 
-| Concern             | Today                                                                            | Gap                                                                            |
-| ------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ |
-| Planet identity     | The domain itself; `<link rel="space-manifest">` on the homepage                 | Works, but identity cannot survive a domain change                             |
-| Planet data         | `manifest.json` plus warp ring links in HTML/config                              | No way to ask "who links to me?" without crawling                              |
-| Space port identity | Ed25519 key pair generated and kept inside the planet's Durable Object           | Public key is never published, so signatures on travel plans cannot be audited |
-| Traveler identity   | `ship_id`, a free-form string                                                    | No traveler identity at all: anyone can claim any ship                         |
-| Travel ledger       | Each space port's own SQLite (Durable Object), last 10 records shown             | Travelers hold no portable proof of their journeys                             |
-| Consensus           | Direct HTTP between space ports (`initiate` / `prepare` / `commit` / `register`) | Fine as is                                                                     |
-
-The largest gaps are traveler identity and verifiable signatures. Both are things atproto is good at.
+| Concern             | Today                                                                            | Gap                                                                            | Addressed in |
+| ------------------- | -------------------------------------------------------------------------------- | ------------------------------------------------------------------------------ | ------------ |
+| Planet identity     | The domain itself; `<link rel="space-manifest">` on the homepage                 | Works, but identity cannot survive a domain change                             | Planets      |
+| Planet data         | `manifest.json` plus warp ring links in HTML/config                              | No way to ask "who links to me?" without crawling                              | Planets      |
+| Space port identity | Ed25519 key pair generated and kept inside the planet's Durable Object           | Public key is never published, so signatures on travel plans cannot be audited | Planets      |
+| Travel ledger       | Each space port's own SQLite (Durable Object), last 10 records shown             | Not readable in a standard way; no portable proof of journeys                  | Planets      |
+| Traveler identity   | `ship_id`, a free-form string                                                    | No traveler identity at all: anyone can claim any ship                         | People       |
+| Consensus           | Direct HTTP between space ports (`initiate` / `prepare` / `commit` / `register`) | Fine as is                                                                     | Unchanged    |
 
 ## 2. Ethos Fit
 
@@ -30,156 +37,28 @@ The largest gaps are traveler identity and verifiable signatures. Both are thing
 ### Where it strains
 
 - **Hidden centralization.** Most accounts use `did:plc` (resolved through a single directory) and are hosted on Bluesky's PDS. A planet built that way depends on two third parties that a plain website does not. Mitigations: support `did:web` (fully domain-rooted), never require a relay or AppView, and keep `manifest.json` valid so a planet can exist with no atproto account at all.
-- **Everything is public.** Atproto repositories have no private records. This conflicts directly with the "Fog of War" goal in `TRAVEL.md` §6. Cargo and armaments must stay off-repo (space port to space port), or be published only as hash commitments.
-- **Repos are mutable.** An owner can delete or rewrite their own records. A repo is a publication medium, not a ledger. Travel records must therefore be self-certifying (carrying controller signatures), and a planet's own state remains the authority for "is this traveler here?".
+- **No network-wide storage.** A repo lives on exactly one PDS, the one hosting that account. Nobody else is obliged to keep a copy, and relays are not archives. Anything that must outlive its host needs replication designed into the game (see [Planets §5](atproto/1-planets.md) and [Ships §4](atproto/3-ships.md)).
+- **Everything is public.** Atproto repositories have no private records. This conflicts directly with the "Fog of War" goal in `TRAVEL.md` §6. Secrets must stay off-repo (space port to space port), or be published only as hash commitments.
+- **Repos are mutable.** An owner can delete or rewrite their own records. A repo is a publication medium, not a ledger. Game records must therefore be self-certifying (carrying controller signatures).
 - **Not a message bus.** PBFT rounds through the firehose would require a relay (centralizing) and add latency for no benefit. Consensus stays on direct HTTP.
 - **Signing keys are not yours to use.** The atproto signing key (secp256k1 / P-256) is held by the PDS and signs repo commits only. Space ports keep their own Ed25519 key and _publish_ the public half in the repo.
 
-## 3. Proposed Design
+## 3. Shared Conventions
 
-### 3.1 Identity
+- **Lexicons.** NSIDs live under the project's domain (`com.federatedplanets.*`) and are published as `com.atproto.lexicon.schema` records with a `_lexicon` DNS TXT record. Each document lists the collections it introduces.
+- **Planets are the record keepers.** Finished, signed results are stored by planets in their own repos. In-flight consensus state stays in the space port's own storage and is never published.
+- **Reference stack is unchanged.** Astro SSR on Cloudflare Workers with a SQLite-backed Durable Object. Reads are plain `fetch` calls to PDS XRPC endpoints; the Durable Object stays authoritative for in-flight state.
 
-- **Planet** = an atproto account whose handle is the planet's domain. The DID is the durable identifier; the domain remains the location.
-- **Coordinates stay hashed from the domain** (unchanged MD5 algorithm). If a planet changes its handle it moves in space but keeps its DID, history, and neighbors' links. This turns a domain change from "planet destroyed" into "planet relocated".
-- **Person** = any atproto account, signed in with atproto OAuth at a space port. A person does not need to own a planet or a ship.
-- **Shuttle** = a planet-funded vessel running between warp ring neighbors. Shuttles are the first and, initially, the only way to travel. In the first release they carry people only.
-- **Anonymous visitors** have no identity. They may ride shuttles as passengers but have no persistent location or history. No account is needed to explore.
-- **Position.** A person is on a planet or in transit on a shuttle. Their position comes from the last signed trip that carried them.
-- **Ship** (later) = a first-class entity with a life of its own. Introduced only after shuttle travel works; see §3.5.
-- **Verification** of a planet: resolve handle to DID, resolve DID document, confirm it lists `at://<domain>`, read the planet record from the PDS named in the document.
+## 4. Cross-Cutting Open Questions
 
-### 3.2 Lexicons
+1. **Additive or replacement?** The plan keeps `manifest.json` as a first-class path. Requiring atproto would simplify the spec but raise the bar for joining and add third-party dependencies.
+2. **`did:plc` acceptance.** Allow it for reach (nearly all existing accounts) while documenting the dependency, or require `did:web` for planets.
+3. **Fog of War.** Accept that game records are public and keep secrets off-repo, or wait for atproto private data.
 
-NSIDs live under the project's domain (`com.federatedplanets.*`) and are published as `com.atproto.lexicon.schema` records with a `_lexicon` DNS TXT record.
-
-| Collection                             | Repo                      | Key    | Contents                                                                                            |
-| -------------------------------------- | ------------------------- | ------ | --------------------------------------------------------------------------------------------------- |
-| `com.federatedplanets.planet`          | Planet                    | `self` | `name`, `description`, `landingSite`, `spacePort`, `travelSafetyLevel`, `spacePortKey` (public key) |
-| `com.federatedplanets.warpLink`        | Planet                    | TID    | `subject` (neighbor DID), `domain`, optional `name`. One record per neighbor                        |
-| `com.federatedplanets.travel.trip`     | Origin and destination    | TID    | An approved shuttle trip: route, times, passenger manifest, controller signatures                   |
-| `com.federatedplanets.travel.declined` | Declining planet          | TID    | Declined travel requests with the stated reason (`TRAVEL.md` §7)                                    |
-| `com.federatedplanets.person.location` | Person                    | `self` | Pointer to the trip that last moved this person; a lookup shortcut, not the authority               |
-| `com.federatedplanets.ship.launch`     | Planet where it was built | TID    | _Later._ The ship's birth. Its AT-URI and CID are the `ship_id` for life                            |
-| `com.federatedplanets.ship.event`      | Planet where it happened  | TID    | _Later._ One entry in a ship's log: `ship`, `prev` (previous event), `type`, payload, signatures    |
-
-### 3.3 What changes in the travel protocol
-
-- Election pool, seed, PBFT phases, timing, and shuttle limits are unchanged.
-- Controllers identify themselves by DID and sign with the key published in their planet record. Any party can now actually verify the $2f+1$ signatures, closing the auditability gap in `TRAVEL.md` §5.
-- A travel plan is a **shuttle trip** with a manifest: the DIDs of signed-in passengers and a head count of anonymous passengers.
-- Controllers check that each signed-in passenger is at the origin, by reading the origin planet's records.
-- Finished, signed results are stored by **planets in their own repos**: an approved trip is written by both origin and destination. In-flight consensus state stays in the space port's own storage and is never published.
-- A planet cannot forge a trip (controller signatures) and cannot quietly drop one (the other planet holds a copy).
-
-### 3.4 Shuttles: people traveling (first release)
-
-The first release is only people traveling on shuttles. No ship model, goods, trade, or currency is needed. A shuttle is just capacity on a route that a planet funds; the trip record is the only thing that persists.
-
-|                     | Anonymous visitor    | Signed-in person                                               |
-| ------------------- | -------------------- | -------------------------------------------------------------- |
-| Identity            | None                 | atproto DID                                                    |
-| Ride shuttles       | Yes, as a head count | Yes, named in the manifest                                     |
-| Record of the trip  | None                 | Named in the planets' `travel.trip`; `person.location` updated |
-| Persistent location | No                   | Yes                                                            |
-| Travel history      | No                   | Yes, readable from the planets visited                         |
-
-Routes and capacity follow the shuttle limits in `TRAVEL.md` §8.
-
-**Deferred:** goods, trade, and currency. Nothing in the first release should assume their design, but the trip manifest is the natural place for cargo to be added later, moved by the same consensus that approves the trip.
-
-### 3.5 Ships (later)
-
-Ships come after people can travel on shuttles. When they arrive, people aboard a ship take their position from the ship, and `person.location` points at the ship instead of a trip. The intended model:
-
-A ship is not an atproto account and does not live in any one repo. It is a **chain of signed events**, each stored by the planet where it happened and each pointing at the one before it. The chain travels with the ship: the planet a ship is docked at always holds the head of its log.
-
-| Event              | Where it is recorded       | Authorized by                               |
-| ------------------ | -------------------------- | ------------------------------------------- |
-| Launch             | Planet that built the ship | The planet and the first owner              |
-| Voyage             | Origin and destination     | Owner or operator, plus elected controllers |
-| Boarding / leaving | Planet where the ship is   | The person, plus owner or operator          |
-| Operator change    | Planet where the ship is   | Owner                                       |
-| Ownership transfer | Planet where the ship is   | Old owner and new owner                     |
-| Upgrade            | Planet performing it       | Owner, plus the planet                      |
-| Other transactions | Planet where it happened   | Per transaction type                        |
-
-Consequences:
-
-- **Identity outlives ownership.** Selling a ship appends a transfer event; the `ship_id`, history, and upgrades stay with the ship.
-- **Roles are state, not scope.** Owner, operators, and passengers are derived by replaying the log. Owners and operators may file travel plans; passengers may not.
-- **People point at ships.** A person's `person.location` record names the ship they are on. It is the person's consent and a lookup shortcut; the boarding event on the planet is the authority. A person can be aboard only one ship at a time.
-- **Shuttles can then become ordinary ships owned by a planet**, restricted to that planet's warp ring neighbors and the caps in `TRAVEL.md` §8. Anonymous visitors ride as a head count and leave no record; signed-in people riding a shuttle board it like any other ship.
-- **Everything is public.** A ship's full history, including who was aboard, is readable by anyone.
-
-**Alternative considered: a ship as its own atproto account.** Giving each ship a DID and repo would make its log self-contained and portable. But an account is controlled by whoever holds its credentials, so every ship would need a custodian (a "port of registry" planet running a multi-account data server), ownership transfer would mean handing over account control, and the log could still be rewritten by that controller. The event chain gets the same "life of its own" with no extra hosting and with transfers validated by the game itself. A ship account could be added later as an optional mirror of the chain.
-
-**Known weakness:** if a planet disappears, the events it stored go with it. The chain stays verifiable from the surviving links, but history from that planet is lost unless the owner (or anyone) kept a copy. Owners mirroring their ship's log into their own repo is the suggested mitigation.
-
-### 3.6 Backward compatibility
-
-`<link rel="space-manifest">` and `manifest.json` remain valid. The manifest gains an optional `did` field. Atproto-aware planets prefer repo records; a planet with no atproto account still appears on the map and can be linked to, but cannot act as a verified traffic controller once signature verification is enforced.
-
-## 4. Implementation Fit (Reference Planet)
-
-The reference planet is Astro SSR on Cloudflare Workers with a SQLite-backed Durable Object. Nothing in this plan changes that.
-
-- **Reads:** plain `fetch` to PDS XRPC endpoints, cached in the existing `traffic_controllers` table.
-- **Writes:** the space port holds an OAuth session (or app password) for the planet's own account and stores tokens in the Durable Object.
-- **Durable Object stays authoritative** for in-flight consensus and current traffic; the repo is where finished, signed results are published.
-- **Self-hosted PDS:** single-user PDS implementations for Cloudflare Workers and Durable Objects exist. Combined with `did:web`, a planet could be domain, website, space port, and data host in one deployment, with no third party involved. This is the most on-ethos configuration and should be an option, not a requirement.
-
-## 5. Plan
-
-### Phase 0: Decisions and spikes
-
-- Confirm the open questions in §6.
-- Spike: atproto OAuth (confidential client with DPoP) running on Workers, with tokens in Durable Object SQLite. Library support on Workers is the main technical unknown.
-- Spike: read latency and failure behavior when resolving a ring of neighbors directly from their PDSs.
-
-### Phase 1: Identity binding (spec only, no behavior change)
-
-- Add the optional `did` field to the manifest and document handle-based verification in `README.md`.
-- Publish the `planet` and `warpLink` lexicons.
-- Reference planet reads neighbor data from repos when available, falling back to `manifest.json`.
-
-### Phase 2: Verifiable space ports
-
-- Publish `spacePortKey` in the planet record.
-- Controllers verify signatures during `prepare` / `commit`; update `TRAVEL.md` to require it.
-
-### Phase 3: People on shuttles
-
-- "Sign in with your handle" at the space port. Anonymous visitors keep working as head-count passengers.
-- Publish the `travel.trip` and `person.location` lexicons; travel plans gain a passenger manifest.
-- Planets write approved trips and declined requests to their repos.
-- Controllers validate signed-in passengers' locations from the origin planet's records.
-- Update `TRAVEL.md` (§4 and §8) to describe shuttles as the travel vehicle and the two kinds of passenger.
-
-### Later (order undecided)
-
-- **Goods, trade, and currency.** Needs its own design first (open question 6).
-- **Ships.** Launch, voyages, boarding, operators, ownership transfer, upgrades (§3.5).
-
-### Phase 4: Discovery (optional, never required)
-
-- Map and explorer tools that consume a firehose or backlink index to show the whole federation.
-- These are conveniences any party may run; the protocol must keep working without them.
-
-### Phase 5: Fully sovereign planets
-
-- Document and template the `did:web` plus self-hosted PDS on Workers configuration in `create-planet`.
-
-## 6. Open Questions
-
-1. **Additive or replacement?** This plan keeps `manifest.json` as a first-class path. Requiring atproto would simplify the spec but raise the bar for joining and add third-party dependencies.
-2. **Coordinates from the domain or the DID?** Domain keeps the founding rule and makes relocation possible. DID would make position permanent but break "your domain name is your destiny".
-3. **Ships (deferred).** Decided: shuttles first, carrying people only; ships are first-class entities introduced later (§3.5). Open for later: event chains on planets (proposed) or ships as their own atproto accounts; whether ships may fly to non-neighbors or have a concurrency cap; whether transfers and upgrades need elected controllers.
-4. **Fog of War.** Accept that travel records are public and keep secrets off-repo, or wait for atproto private data before building cargo features.
-5. **`did:plc` acceptance.** Allow it for reach (nearly all existing accounts) while documenting the dependency, or require `did:web` for planets.
-6. **Goods, trade, and currency (deferred).** To be designed after people can travel: what is tradeable, who creates it, how currency works, and how planets are kept honest about stock.
+Questions specific to one area are listed in that area's document.
 
 ---
 
-_Document Version: 0.6.0_
+_Document Version: 0.7.0_
 
 _Status: Exploration_
