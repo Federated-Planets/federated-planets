@@ -42,6 +42,7 @@ The largest gaps are traveler identity and verifiable signatures. Both are thing
 - **Planet** = an atproto account whose handle is the planet's domain. The DID is the durable identifier; the domain remains the location.
 - **Coordinates stay hashed from the domain** (unchanged MD5 algorithm). If a planet changes its handle it moves in space but keeps its DID, history, and neighbors' links. This turns a domain change from "planet destroyed" into "planet relocated".
 - **Traveler** = any atproto account, signed in with atproto OAuth at a space port. `ship_id` becomes the traveler's DID. A traveler does not need to own a planet.
+- **Anonymous visitors** travel only on planet-sponsored shuttles (see §3.4). No account is needed to explore.
 - **Verification** of a planet: resolve handle to DID, resolve DID document, confirm it lists `at://<domain>`, read the planet record from the PDS named in the document.
 
 ### 3.2 Lexicons
@@ -64,7 +65,21 @@ One record per warp link (like a follow) rather than an array in the planet reco
 - On approval, the origin space port writes the signed plan to its own repo and hands a copy to the traveler's repo (written via the traveler's OAuth session).
 - "Is the traveler at the origin?" is checked against the last signed journey in the passport, cross-checked with the origin's own state. A traveler who deletes passport records only harms themselves.
 
-### 3.4 Backward compatibility
+### 3.4 Two classes of travel
+
+| | Planet-sponsored shuttle | Traveler's own ship |
+| --- | --- | --- |
+| Who | Anyone, anonymous | Signed-in atproto account |
+| Ship identity | Issued by the origin planet, scoped to its DID (e.g. `<planet DID>#shuttle-<n>`) | The traveler's DID |
+| Accountable party | The sponsoring planet | The traveler |
+| Routes | Warp ring neighbors only, within the shuttle limits of `TRAVEL.md` §8 | Set by the travel protocol, not by shuttle capacity |
+| Record | `travel.logEntry` on origin and destination only | Also a `travel.journey` in the traveler's passport |
+| Persistence | None: the journey belongs to the shuttle, not the passenger | Portable history and verified current location |
+| Functionality | Travel and sightseeing only | Everything that needs a durable identity (cargo, ownership, reputation, future features) |
+
+Shuttles keep casual visiting frictionless while giving every ship an accountable identity: a shuttle is vouched for by the planet that funds it, and the existing shuttle caps bound how much anonymous traffic any planet can generate. Controllers validate a shuttle plan against the sponsor's identity and the route's shuttle capacity instead of a passport.
+
+### 3.5 Backward compatibility
 
 `<link rel="space-manifest">` and `manifest.json` remain valid. The manifest gains an optional `did` field. Atproto-aware planets prefer repo records; a planet with no atproto account still appears on the map and can be linked to, but cannot act as a verified traffic controller once signature verification is enforced.
 
@@ -99,6 +114,7 @@ The reference planet is Astro SSR on Cloudflare Workers with a SQLite-backed Dur
 ### Phase 3: Travelers
 
 - "Sign in with your handle" at the space port; `ship_id` becomes a DID.
+- Anonymous visitors are routed to shuttles, with ship IDs issued under the origin planet's DID; update `TRAVEL.md` §8 to define shuttles as the anonymous travel class.
 - Write `travel.journey` records to the traveler's passport and `travel.logEntry` records to the planets.
 - Validate traveler location from signed journeys.
 
@@ -115,12 +131,12 @@ The reference planet is Astro SSR on Cloudflare Workers with a SQLite-backed Dur
 
 1. **Additive or replacement?** This plan keeps `manifest.json` as a first-class path. Requiring atproto would simplify the spec but raise the bar for joining and add third-party dependencies.
 2. **Coordinates from the domain or the DID?** Domain keeps the founding rule and makes relocation possible. DID would make position permanent but break "your domain name is your destiny".
-3. **Must travelers have an atproto account?** Requiring one gives real identity and anti-cheat; allowing anonymous ships keeps casual visiting frictionless.
+3. **Limits on own ships.** Decided: anonymous travel is limited to planet-sponsored shuttles (§3.4). Still open: whether a signed-in traveler's own ship may fly to non-neighbors, and whether it is subject to any concurrency cap.
 4. **Fog of War.** Accept that travel records are public and keep secrets off-repo, or wait for atproto private data before building cargo features.
 5. **`did:plc` acceptance.** Allow it for reach (nearly all existing accounts) while documenting the dependency, or require `did:web` for planets.
 
 ---
 
-_Document Version: 0.1.0_
+_Document Version: 0.2.0_
 
 _Status: Exploration_
